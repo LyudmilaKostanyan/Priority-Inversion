@@ -1,0 +1,9 @@
+*.o
+*.obj
+*.exe
+*.out
+*.dSYM/
+build/
+CMakeFiles/
+.vscode/
+*.csv

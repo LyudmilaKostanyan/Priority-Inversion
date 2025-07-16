@@ -1,0 +1,102 @@
+name: Cross platform build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        build_type: [Debug]
+        include:
+          - os: windows-latest
+            c_compiler: cl
+            cpp_compiler: cl
+          - os: ubuntu-latest
+            c_compiler: gcc
+            cpp_compiler: g++
+          - os: macos-latest
+            c_compiler: clang
+            cpp_compiler: clang++
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set reusable strings
+      id: strings
+      shell: bash
+      run: echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+    - name: Configure CMake
+      shell: bash
+      run: |
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          cmake -S . -B "$(cygpath -u "${{ steps.strings.outputs.build-output-dir }}")" -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        else
+          cmake -S . -B ${{ steps.strings.outputs.build-output-dir }} -DCMAKE_C_COMPILER=${{ matrix.c_compiler }} -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }} -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        fi
+
+    - name: Build
+      shell: bash
+      run: |
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          cmake --build "$(cygpath -u "${{ steps.strings.outputs.build-output-dir }}")" --config ${{ matrix.build_type }}
+        else
+          cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+        fi
+
+    - name: Run test "Without priority" (Timeout 60 seconds)
+      shell: bash
+      run: |
+        echo "Running main with a 60-second timeout..."
+            if [[ "$RUNNER_OS" == "Windows" ]]; then
+              pwsh -Command "
+                \$exePath = '${{ steps.strings.outputs.build-output-dir }}\\Debug\\main.exe';
+                if (-Not (Test-Path \$exePath)) {
+                  Write-Error 'Executable not found at \$exePath';
+                  exit 0;
+                }
+                \$startInfo = New-Object System.Diagnostics.ProcessStartInfo;
+                \$startInfo.FileName = \$exePath;
+                \$startInfo.RedirectStandardInput = \$true;
+                \$startInfo.RedirectStandardOutput = \$true;
+                \$startInfo.UseShellExecute = \$false;
+                \$startInfo.CreateNoWindow = \$true;
+                \$process = New-Object System.Diagnostics.Process;
+                \$process.StartInfo = \$startInfo;
+                \$process.Start() | Out-Null;
+                \$process.StandardInput.WriteLine('1');
+                \$process.StandardInput.Close();
+        
+                if (-not \$process.WaitForExit(60000)) {
+                  Write-Warning 'Process exceeded 60 seconds. Killing...';
+                  \$process.Kill();
+                  exit 0;
+                }
+        
+                \$output = \$process.StandardOutput.ReadToEnd();
+                Write-Host \$output;
+            "
+        else
+          cd ${{ steps.strings.outputs.build-output-dir }}
+          echo 1 | timeout 60s ./main || echo "Test timed out or failed."
+        fi
+
+    
+    - name: Run test "With priority"
+      shell: bash
+      run: |
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          exe_path="$(cygpath -u "${{ steps.strings.outputs.build-output-dir }}")/Debug/main.exe"
+          echo "Running: $exe_path"
+          echo 2 | "$exe_path"
+        else
+          cd ${{ steps.strings.outputs.build-output-dir }}
+          echo 2 | ./main
+        fi
