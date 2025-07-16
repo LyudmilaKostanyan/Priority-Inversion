@@ -1,93 +1,68 @@
 #include <iostream>
 #include <thread>
-#include <mutex>
 #include <chrono>
-#include <atomic>
 
-std::mutex resource_mutex;
-std::atomic<bool> low_done{false};
-std::atomic<bool> high_waiting{false};
+#ifdef _WIN32
+	#include <windows.h>
+#else
+	#include <pthread.h>
+#endif
 
-// Simulate low-priority thread
-void low_priority_task(bool with_inheritance) {
-	std::cout << "[Low] Starting and locking resource\n";
-	resource_mutex.lock();
-	std::this_thread::sleep_for(std::chrono::milliseconds(100)); // simulate work
+// Set thread priority: 0=low, 1=medium, 2=high
+void set_priority(std::thread& t, int level) {
+#ifdef _WIN32
+	int prio = THREAD_PRIORITY_NORMAL;
+	if (level == 0) prio = THREAD_PRIORITY_LOWEST;
+	if (level == 1) prio = THREAD_PRIORITY_ABOVE_NORMAL;
+	if (level == 2) prio = THREAD_PRIORITY_HIGHEST;
+	SetThreadPriority(t.native_handle(), prio);
+#else
+	sched_param sch;
+	int policy = SCHED_FIFO;
+	int max = sched_get_priority_max(policy);
+	int min = sched_get_priority_min(policy);
+	int prio = min + (max - min) * level / 2; // level 0..2 → min..max
+	sch.sched_priority = prio;
+	pthread_setschedparam(t.native_handle(), policy, &sch);
+#endif
+}
 
-	while (high_waiting && !with_inheritance) {
-		// low can't run because medium is preempting it
-		std::this_thread::yield(); // simulate being preempted
+void low_task() {
+	for (int i = 0; i < 5; ++i) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		std::cout << "[Low] log sensor data\n";
 	}
-
-	std::cout << "[Low] Unlocking resource\n";
-	resource_mutex.unlock();
-	low_done = true;
 }
 
-// Simulate medium-priority thread (keeps CPU busy)
-void medium_priority_task() {
-	std::cout << "[Medium] Starting\n";
-	while (!low_done) {
-		for (volatile int i = 0; i < 10000; ++i) {}
-		std::this_thread::yield();
+void medium_task() {
+	for (int i = 0; i < 5; ++i) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		std::cout << "[Medium] process communication\n";
 	}
-	std::cout << "[Medium] Finished\n";
 }
 
-// Simulate high-priority thread (needs resource)
-void high_priority_task() {
-	std::this_thread::sleep_for(std::chrono::milliseconds(10)); // ensure low locks first
-	std::cout << "[High] Trying to lock resource\n";
-	auto start = std::chrono::high_resolution_clock::now();
-
-	high_waiting = true;
-	resource_mutex.lock(); // will block if low still holds the mutex
-	auto end = std::chrono::high_resolution_clock::now();
-
-	std::cout << "[High] Acquired resource, doing work\n";
-	resource_mutex.unlock();
-	high_waiting = false;
-
-	double wait_time = std::chrono::duration<double, std::milli>(end - start).count();
-	std::cout << "[High] Waited " << wait_time << " ms\n";
+void high_task() {
+	for (int i = 0; i < 5; ++i) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		std::cout << "[High] execute critical command\n";
+	}
 }
 
-void run_simulation(bool with_inheritance) {
-	std::cout << "\n=== Simulation "
-			<< (with_inheritance ? "WITH" : "WITHOUT") << " Priority Inheritance ===\n";
+int main() {
+	std::cout << "=== Fixed-Priority Scheduling (no resource conflict) ===\n";
 
-	low_done = false;
-	high_waiting = false;
+	std::thread low(low_task);
+	std::thread medium(medium_task);
+	std::thread high(high_task);
 
-	std::thread low([&]() { low_priority_task(with_inheritance); });
-	std::thread medium(medium_priority_task);
-	std::thread high(high_priority_task);
+	set_priority(low, 0);    // Low
+	set_priority(medium, 1); // Medium
+	set_priority(high, 2);   // High
 
 	high.join();
 	medium.join();
 	low.join();
-}
 
-int main() {
-	std::cout << "Choose mode:\n"
-				<< "1 = Run simulation without priority inheritance\n"
-				<< "2 = Run simulation with priority inheritance\n"
-				<< "Enter your choice: ";
-	int choice;
-	std::cin >> choice;
-	switch (choice)
-	{
-		case 1:
-			std::cout << "Running simulation without priority inheritance...\n";
-			run_simulation(false);
-			break;
-		case 2:
-			std::cout << "Running simulation with priority inheritance...\n";
-			run_simulation(true);
-			break;
-		default:
-			std::cout << "Invalid choice. Exiting.\n";
-			return 1;
-	}
+	std::cout << "=== Done ===\n";
 	return 0;
 }
