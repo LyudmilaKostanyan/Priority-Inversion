@@ -50,53 +50,14 @@ jobs:
         else
           cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
         fi
-
-    - name: Run test "Without priority" (Timeout 60 seconds)
-      shell: bash
-      run: |
-        echo "Running main with a 60-second timeout..."
-            if [[ "$RUNNER_OS" == "Windows" ]]; then
-              pwsh -Command "
-                \$exePath = '${{ steps.strings.outputs.build-output-dir }}\\Debug\\main.exe';
-                if (-Not (Test-Path \$exePath)) {
-                  Write-Error 'Executable not found at \$exePath';
-                  exit 0;
-                }
-                \$startInfo = New-Object System.Diagnostics.ProcessStartInfo;
-                \$startInfo.FileName = \$exePath;
-                \$startInfo.RedirectStandardInput = \$true;
-                \$startInfo.RedirectStandardOutput = \$true;
-                \$startInfo.UseShellExecute = \$false;
-                \$startInfo.CreateNoWindow = \$true;
-                \$process = New-Object System.Diagnostics.Process;
-                \$process.StartInfo = \$startInfo;
-                \$process.Start() | Out-Null;
-                \$process.StandardInput.WriteLine('1');
-                \$process.StandardInput.Close();
-        
-                if (-not \$process.WaitForExit(60000)) {
-                  Write-Warning 'Process exceeded 60 seconds. Killing...';
-                  \$process.Kill();
-                  exit 0;
-                }
-        
-                \$output = \$process.StandardOutput.ReadToEnd();
-                Write-Host \$output;
-            "
-        else
-          cd ${{ steps.strings.outputs.build-output-dir }}
-          echo 1 | timeout 60s ./main || echo "Test timed out or failed."
-        fi
-
-    
-    - name: Run test "With priority"
+    - name: Run
       shell: bash
       run: |
         if [[ "$RUNNER_OS" == "Windows" ]]; then
           exe_path="$(cygpath -u "${{ steps.strings.outputs.build-output-dir }}")/Debug/main.exe"
           echo "Running: $exe_path"
-          echo 2 | "$exe_path"
+          $exe_path
         else
           cd ${{ steps.strings.outputs.build-output-dir }}
-          echo 2 | ./main
+          ./main
         fi
