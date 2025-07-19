@@ -9,14 +9,13 @@
 3. [What Does This Project Demonstrate?](#what-does-this-project-demonstrate)
 4. [Example Output](#example-output)
 5. [Explanation of Output](#explanation-of-output)
-6. [Why This Cannot Be Fully Reproduced on macOS](#why-this-cannot-be-fully-reproduced-on-macos)
-7. [Limitations of CI Environments and Windows](#limitations-of-ci-environments-and-windows)
-8. [How to Compile and Run](#how-to-compile-and-run)
+6. [Platform and CI Caveats](#platform-and-ci-caveats)
+7. [How to Compile and Run](#how-to-compile-and-run)
 
    * [Linux](#linux)
    * [Windows](#windows)
    * [macOS](#macos)
-9. [Parameters](#parameters)
+8. [Parameters](#parameters)
 
 ## Overview
 
@@ -134,21 +133,13 @@ This is why you should always run the simulation with CPU affinity enabled (sing
 
 ---
 
-## Why This Cannot Be Fully Reproduced on macOS
+## Platform and CI Caveats
 
-* **macOS does not provide a standard tool for core pinning**—there is no equivalent to `taskset` or `/affinity`.
-* The macOS scheduler is designed for “fairness”; every thread eventually gets CPU time, so real deadlocks do not occur as on a real-time OS.
-* As a result, you will see delays, but not indefinite blocking as on VxWorks or with strict single-core affinity on Linux/Windows.
-* Tools like `cpulimit` only restrict total CPU usage, not core affinity.
+* **macOS does not provide a standard tool for core pinning**—there is no equivalent to `taskset` or `/affinity`. The macOS scheduler is designed for “fairness”; every thread eventually gets CPU time, so real deadlocks do not occur as on a real-time OS. As a result, you may see delays, but not indefinite blocking as on VxWorks or with strict single-core affinity on Linux/Windows. Tools like `cpulimit` only restrict total CPU usage, not core affinity.
 
----
-
-## Limitations of CI Environments and Windows
-
-> **Note:**
-> In cloud CI environments such as GitHub Actions, Windows runners cannot reliably simulate single-core execution due to virtualization and cloud CPU scheduling. Affinity and thread priority settings are often ignored, and resource sharing with other virtual machines can make thread scheduling unpredictable.
->
-> For the most reliable demonstration and analysis, prefer local testing on Linux with `taskset`, or on your own Windows machine if you can set affinity manually.
+* **Cloud CI environments (like GitHub Actions) and Windows:**
+  In cloud CI environments, Windows runners cannot reliably simulate single-core execution due to virtualization and cloud CPU scheduling. Affinity and thread priority settings are often ignored, and resource sharing with other virtual machines can make thread scheduling unpredictable.
+  For the most reliable demonstration and analysis, prefer local testing on Linux with `taskset`, or on your own Windows machine if you can set affinity manually.
 
 ---
 
