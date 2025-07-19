@@ -1,7 +1,7 @@
 #include <iostream>
 #include <thread>
-#include <mutex>
 #include <chrono>
+#include <mutex>
 #include <atomic>
 
 #ifdef _WIN32
@@ -11,12 +11,18 @@
 #endif
 
 std::atomic<bool> done{false};
+std::atomic<bool> high_waiting{false};
+
+#ifdef _WIN32
+std::mutex resource_mutex;
+HANDLE low_thread_handle = nullptr;
+int low_original_priority = THREAD_PRIORITY_LOWEST;
+#endif
 
 #ifndef _WIN32
 pthread_mutex_t pi_mutex;
 #endif
 
-// Set thread priority: 0=low, 1=medium, 2=high
 void set_priority(std::thread& t, int level) {
 #ifdef _WIN32
     int prio = THREAD_PRIORITY_NORMAL;
@@ -37,21 +43,39 @@ void set_priority(std::thread& t, int level) {
 
 // Low-priority thread: acquires the shared resource (mutex) and holds it for a while
 void low_task() {
-#ifndef _WIN32
-    pthread_mutex_lock(&pi_mutex);
-#else
-    // On Windows, Priority Inheritance is not natively supported for mutexes
-    // For demonstration only; not effective for real inversion resolution
-    // std::lock_guard<std::mutex> lock(resource_mutex);
-#endif
+#ifdef _WIN32
+    low_thread_handle = GetCurrentThread();
+    low_original_priority = GetThreadPriority(low_thread_handle);
+
+    resource_mutex.lock();
     std::cout << "[Low] Acquired resource\n";
-    // Simulate a long operation while holding the resource
+    int sleep_count = 30;
+    for (int i = 0; i < sleep_count; ++i) {
+        // If high is waiting, temporarily boost low's priority
+        if (high_waiting && GetThreadPriority(low_thread_handle) != THREAD_PRIORITY_HIGHEST) {
+            SetThreadPriority(low_thread_handle, THREAD_PRIORITY_HIGHEST);
+            std::cout << "[Low] Priority temporarily raised to HIGH\n";
+        }
+        // If high is not waiting, restore original priority
+        if (!high_waiting && GetThreadPriority(low_thread_handle) != low_original_priority) {
+            SetThreadPriority(low_thread_handle, low_original_priority);
+            std::cout << "[Low] Priority restored to LOW\n";
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    // Restore original priority before releasing resource
+    SetThreadPriority(low_thread_handle, low_original_priority);
+    std::cout << "[Low] Releasing resource\n";
+    resource_mutex.unlock();
+    std::cout << "[Low] Released resource\n";
+#else
+    pthread_mutex_lock(&pi_mutex);
+    std::cout << "[Low] Acquired resource\n";
     std::this_thread::sleep_for(std::chrono::seconds(3));
     std::cout << "[Low] Releasing resource\n";
-#ifndef _WIN32
     pthread_mutex_unlock(&pi_mutex);
-#endif
     std::cout << "[Low] Released resource\n";
+#endif
 }
 
 // Medium-priority thread: continuously consumes CPU, preventing low-priority thread from running
@@ -64,27 +88,29 @@ void medium_task() {
 
 // High-priority thread: needs the shared resource for critical work
 void high_task() {
-    // Give the low-priority thread a head start to acquire the resource first
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Allow low to acquire the resource first
     auto start = std::chrono::high_resolution_clock::now();
     std::cout << "[High] Trying to acquire resource...\n";
-#ifndef _WIN32
-    pthread_mutex_lock(&pi_mutex);
+#ifdef _WIN32
+    high_waiting = true;
+    resource_mutex.lock();
+    auto end = std::chrono::high_resolution_clock::now();
+    high_waiting = false;
+    std::cout << "[High] Acquired resource\n";
+    resource_mutex.unlock();
 #else
-    // std::lock_guard<std::mutex> lock(resource_mutex);
-#endif
+    pthread_mutex_lock(&pi_mutex);
     auto end = std::chrono::high_resolution_clock::now();
     std::cout << "[High] Acquired resource\n";
-#ifndef _WIN32
     pthread_mutex_unlock(&pi_mutex);
 #endif
     std::chrono::duration<double, std::milli> wait_time = end - start;
     std::cout << "[High] Waited " << wait_time.count() << " ms\n";
-    done = true; // Notify medium-priority thread to stop
+    done = true; // Notify medium to stop
 }
 
 int main() {
-    std::cout << "=== Mars Pathfinder Priority Inversion (Priority Inheritance) ===\n";
+    std::cout << "=== Mars Pathfinder Priority Inversion (Priority Inheritance Simulation) ===\n";
 
 #ifndef _WIN32
     // Initialize a mutex with Priority Inheritance protocol
@@ -94,7 +120,6 @@ int main() {
     pthread_mutex_init(&pi_mutex, &attr);
 #endif
 
-    // Launch threads for each role
     std::thread low(low_task);
     set_priority(low, 0); // Low priority
 
