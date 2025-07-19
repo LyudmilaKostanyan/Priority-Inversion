@@ -2,20 +2,20 @@
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [The Story: Mars Pathfinder and the Real-World Consequences of Concurrency Bugs](#the-story-mars-pathfinder-and-the-real-world-consequences-of-concurrency-bugs)
+* [Overview](#overview)
+* [The Story: Mars Pathfinder and the Real-World Consequences of Concurrency Bugs](#the-story-mars-pathfinder-and-the-real-world-consequences-of-concurrency-bugs)
 
    * [Mars Pathfinder Hardware and Scheduling Constraints](#mars-pathfinder-hardware-and-scheduling-constraints)
-3. [What Does This Project Demonstrate?](#what-does-this-project-demonstrate)
-4. [Example Output](#example-output)
-5. [Explanation of Output](#explanation-of-output)
-6. [Platform and CI Caveats](#platform-and-ci-caveats)
-7. [How to Compile and Run](#how-to-compile-and-run)
+* [What Does This Project Demonstrate?](#what-does-this-project-demonstrate)
+* [Example Output](#example-output)
+* [Explanation of Output](#explanation-of-output)
+* [Platform and CI Caveats](#platform-and-ci-caveats)
+* [How to Compile and Run](#how-to-compile-and-run)
 
    * [Linux](#linux)
    * [Windows](#windows)
    * [macOS](#macos)
-8. [Parameters](#parameters)
+* [Parameters](#parameters)
 
 ## Overview
 
