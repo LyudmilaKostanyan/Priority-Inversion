@@ -1,5 +1,23 @@
 # Mars Pathfinder Priority Inversion Simulation
 
+## Table of Contents
+
+1. [Overview](#overview)
+2. [The Story: Mars Pathfinder and the Real-World Consequences of Concurrency Bugs](#the-story-mars-pathfinder-and-the-real-world-consequences-of-concurrency-bugs)
+
+   * [Mars Pathfinder Hardware and Scheduling Constraints](#mars-pathfinder-hardware-and-scheduling-constraints)
+3. [What Does This Project Demonstrate?](#what-does-this-project-demonstrate)
+4. [Example Output](#example-output)
+5. [Explanation of Output](#explanation-of-output)
+6. [Why This Cannot Be Fully Reproduced on macOS](#why-this-cannot-be-fully-reproduced-on-macos)
+7. [Limitations of CI Environments and Windows](#limitations-of-ci-environments-and-windows)
+8. [How to Compile and Run](#how-to-compile-and-run)
+
+   * [Linux](#linux)
+   * [Windows](#windows)
+   * [macOS](#macos)
+9. [Parameters](#parameters)
+
 ## Overview
 
 This project is a detailed simulation of the **priority inversion bug** that famously occurred on NASA’s Mars Pathfinder mission in 1997, and a demonstration of how modern operating systems resolve such concurrency bugs through **priority inheritance**.
