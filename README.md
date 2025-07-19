@@ -27,6 +27,10 @@ After intense investigation, engineers discovered a classic **priority inversion
 
 The fix was to add **priority inheritance**: when a high-priority thread is blocked waiting for a lock held by a lower-priority thread, the low-priority thread is temporarily *boosted* to the high priority so it can release the resource quickly.
 
+#### Mars Pathfinder Hardware and Scheduling Constraints
+
+The Mars Pathfinder lander used a single-core, single-threaded IBM RISC 601 processor running at 20 MHz, with only 128 MB of RAM and a real-time operating system (VxWorks). All onboard software tasks had to share this single CPU, and there was no hardware support for simultaneous multi-threading or multiple cores. As a result, if a lower-priority task held a resource needed by a higher-priority task, and a medium-priority task kept the CPU busy, the high-priority task could be blocked for long periods—leading to missed deadlines, system resets, and loss of scientific data. This unique combination of limited hardware and real-time constraints made the priority inversion bug especially dangerous on Mars Pathfinder.
+
 ---
 
 ## What Does This Project Demonstrate?
@@ -34,7 +38,12 @@ The fix was to add **priority inheritance**: when a high-priority thread is bloc
 * **Reproduce the Mars Pathfinder bug:**
   The simulation creates a scenario where a low-priority thread acquires a shared resource (mutex), a high-priority thread needs this resource for critical work, and a CPU-intensive medium-priority thread keeps the CPU busy. The medium thread prevents the low-priority thread from running, so the high-priority thread is starved—just like the real Mars Pathfinder case.
 * **See the effect of CPU affinity:**
-  Running all threads on a single CPU core makes the inversion effect much more severe. On Linux, use `taskset -c 0 ./main ...` to force this. On Windows (locally, not in CI), use `start /wait /affinity 1 ...`. This setup maximizes contention from the medium thread and often results in a near-deadlock without priority inheritance.
+  Running all threads on a single CPU core makes the inversion effect much more severe and brings your desktop simulation as close as possible to the real Mars Pathfinder bug. On Linux, use taskset -c 0 ./main ... to force this. On Windows (locally, not in CI), use start /wait /affinity 1 ....
+Why is this important?
+On a typical modern desktop or laptop with multiple CPU cores, even if one thread is busy, the operating system’s scheduler can run other threads on other cores. This means that, even in the presence of a buggy priority inversion scenario, the low-priority thread will eventually get scheduled on a free core and release the resource, so your simulation will "finish" after a short delay rather than hanging or creating a catastrophic delay.
+However, on the real Mars Pathfinder, the hardware was a single-core, single-threaded processor (an IBM RISC 601 CPU running at 20 MHz with only 128MB RAM and very limited multitasking ability). Under these real-time conditions, with all tasks forced to compete for a single CPU, the priority inversion could completely prevent the high-priority task from running.
+Therefore, forcing all threads onto a single core in your simulation reproduces the real bottleneck: the medium-priority thread can "hog" the only available CPU, indefinitely delaying the low-priority thread, and thus blocking the high-priority thread from ever making progress—exactly as happened on Mars.
+This is why you should always run the simulation with CPU affinity enabled (single core), especially when testing without priority inheritance.
 * **Observe the fix:**
   With priority inheritance enabled, if the high-priority thread is blocked by the low-priority thread, the program temporarily boosts the low-priority thread’s priority. This allows it to preempt the medium thread and release the mutex quickly, solving the bug.
 * **Implementation details:**
@@ -43,8 +52,6 @@ The fix was to add **priority inheritance**: when a high-priority thread is bloc
   * On Linux, uses a POSIX mutex with `PTHREAD_PRIO_INHERIT` if available for a realistic kernel-level effect.
   * On Windows, the simulation manually boosts low-priority thread priority if the high-priority thread is blocked. In CI, affinity cannot be set and priority boosts may be ignored.
   * The medium thread runs a busy-wait loop to simulate heavy CPU contention.
-* **Compare behavior on Linux, Windows, and macOS:**
-  Linux with `taskset` gives the clearest and most realistic effect; macOS cannot enforce strict core pinning and tends to "fairly" schedule threads; Windows CI cannot guarantee affinity or priority boosts, but on a local Windows system, the effect can be reproduced using `/affinity`.
 
 ---
 
