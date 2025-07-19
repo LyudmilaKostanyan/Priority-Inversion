@@ -29,20 +29,22 @@ The fix was to add **priority inheritance**: when a high-priority thread is bloc
 
 ---
 
-## Why This Project?
-
-* **Priority inversion** is not just theoretical; it has caused real mission failures and is a risk in any real-time, embedded, or concurrent system (spacecraft, aviation, robotics, automotive, etc.).
-* **Priority inheritance** is a crucial OS-level mechanism to avoid such failures.
-* This project **lets you experience and visualize** both the bug and its solution, on your PC or in CI, and learn fundamental lessons in concurrent programming and OS design.
-
----
-
 ## What Does This Project Demonstrate?
 
-* **Reproduce the Mars Pathfinder bug:** See severe delays or virtual deadlock due to priority inversion.
-* **See the effect of CPU affinity:** Forcing all threads onto a single core maximizes the inversion effect, just as it happened on the rover.
-* **Observe the fix:** See how priority inheritance immediately solves the problem.
-* **Compare behavior on Linux, Windows, and macOS:** Learn how operating system design affects real concurrency bugs.
+* **Reproduce the Mars Pathfinder bug:**
+  The simulation creates a scenario where a low-priority thread acquires a shared resource (mutex), a high-priority thread needs this resource for critical work, and a CPU-intensive medium-priority thread keeps the CPU busy. The medium thread prevents the low-priority thread from running, so the high-priority thread is starved—just like the real Mars Pathfinder case.
+* **See the effect of CPU affinity:**
+  Running all threads on a single CPU core makes the inversion effect much more severe. On Linux, use `taskset -c 0 ./main ...` to force this. On Windows (locally, not in CI), use `start /wait /affinity 1 ...`. This setup maximizes contention from the medium thread and often results in a near-deadlock without priority inheritance.
+* **Observe the fix:**
+  With priority inheritance enabled, if the high-priority thread is blocked by the low-priority thread, the program temporarily boosts the low-priority thread’s priority. This allows it to preempt the medium thread and release the mutex quickly, solving the bug.
+* **Implementation details:**
+
+  * Written in portable C++ with `std::thread` and mutexes, plus platform-specific logic for setting thread priorities and affinity.
+  * On Linux, uses a POSIX mutex with `PTHREAD_PRIO_INHERIT` if available for a realistic kernel-level effect.
+  * On Windows, the simulation manually boosts low-priority thread priority if the high-priority thread is blocked. In CI, affinity cannot be set and priority boosts may be ignored.
+  * The medium thread runs a busy-wait loop to simulate heavy CPU contention.
+* **Compare behavior on Linux, Windows, and macOS:**
+  Linux with `taskset` gives the clearest and most realistic effect; macOS cannot enforce strict core pinning and tends to "fairly" schedule threads; Windows CI cannot guarantee affinity or priority boosts, but on a local Windows system, the effect can be reproduced using `/affinity`.
 
 ---
 
@@ -101,21 +103,9 @@ The fix was to add **priority inheritance**: when a high-priority thread is bloc
 
 ## Explanation of Output
 
-* **Waited N ms:** How long the high-priority thread was blocked.
-  In the real bug, this could be nearly indefinite. In the simulation, with affinity and CPU load, it can be very long.
+* **Waited N ms:** Time the high-priority thread was blocked. In the real bug, this could be nearly indefinite; in simulation, with affinity and CPU load, it can be very long.
 * **\[Medium] Still hogging CPU...**: The medium-priority thread monopolizes the CPU, preventing progress.
 * **\[Low] Priority temporarily raised to HIGH:** Priority inheritance is being simulated—the low-priority thread is boosted to release the mutex.
-
----
-
-## Achieving the Mars Pathfinder Effect on Your Computer and in CI
-
-* **Linux:** Use `taskset -c 0` to force all threads onto a single core.
-* **Windows:** See below for CI limitations—on local machines, you can use `/affinity` to simulate single-core execution, but this is not available in CI.
-* **In code:** The medium thread creates heavy CPU load (busy-wait loop) to preempt the low-priority thread.
-* **In CI:** The workflow sets affinity and enforces a timeout to make the effect reproducible (**Linux only**).
-
-With these settings, the high-priority thread can be delayed for many seconds or more, mimicking the real Mars Pathfinder bug. When priority inheritance is enabled, the problem is solved and delays drop sharply.
 
 ---
 
@@ -128,14 +118,12 @@ With these settings, the high-priority thread can be delayed for many seconds or
 
 ---
 
-## Windows Support: No CI, No Core Pinning
+## Limitations of CI Environments and Windows
 
 > **Note:**
-> There is **no Windows CI support for this project**.
-> On Windows, the program runs on all available CPU cores (multi-core).
-> Core pinning (forcing the program to run on a single core) is not available in GitHub Actions CI for Windows due to limitations of virtualization and cloud scheduling.
-> Affinity settings in the cloud are unreliable—your process may not be assigned a real core, and boosted thread priorities may be ignored or overridden.
-> As a result, the effect of priority inversion is less dramatic and less predictable on Windows, and may not match the classic Mars Pathfinder scenario.
+> In cloud CI environments such as GitHub Actions, Windows runners cannot reliably simulate single-core execution due to virtualization and cloud CPU scheduling. Affinity and thread priority settings are often ignored, and resource sharing with other virtual machines can make thread scheduling unpredictable.
+>
+> For the most reliable demonstration and analysis, prefer local testing on Linux with `taskset`, or on your own Windows machine if you can set affinity manually.
 
 ---
 
@@ -144,8 +132,8 @@ With these settings, the high-priority thread can be delayed for many seconds or
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/username/Mars-Pathfinder-Priority-Inversion.git
-cd Mars-Pathfinder-Priority-Inversion
+git clone https://github.com/LyudmilaKostanyan/Priority-Inversion.git
+cd Priority-Inversion
 ```
 
 ### 2. Build the Project
@@ -161,42 +149,54 @@ cmake --build build
 
 #### Linux
 
-* **To simulate the Mars bug (no priority inheritance):**
+* **To simulate the Mars bug (without priority inheritance):**
 
   ```bash
-  timeout 60s taskset -c 0 ./build/main --no-inheritance
+  # Strongly recommended: use taskset to pin to a single core!
+  taskset -c 0 ./build/main --no-inheritance
+  # If the program hangs or takes too long, stop it manually with Ctrl+C.
   ```
-* **With priority inheritance (default):**
+* **With priority inheritance (default/fixed):**
 
   ```bash
-  ./build/main
+  taskset -c 0 ./build/main
+  # Press Ctrl+C to stop the program if needed.
   ```
 
 #### Windows
 
-* **On Windows, only multi-core execution is available in CI.**
-* **To run locally:** you may use
+* **On Windows, core pinning is only available locally (not in CI).**
+* **To run locally without priority inheritance:**
 
   ```powershell
+  # Use /affinity to run on a single core!
   start /wait /affinity 1 .\build\Debug\main.exe --no-inheritance
+  # To terminate if it hangs, close the window or press Ctrl+C in the terminal.
   ```
+* **With priority inheritance (default/fixed):**
 
-  if your system supports it. In CI, core pinning is not supported.
+  ```powershell
+  start /wait /affinity 1 .\build\Debug\main.exe
+  # To terminate, close the window or press Ctrl+C in the terminal.
+  ```
 
 #### macOS
 
-* **With GNU timeout (no core pinning available):**
+* **Core pinning is not available.**
+* **To run without priority inheritance:**
 
   ```bash
-  gtimeout 60s ./build/main --no-inheritance
+  ./build/main --no-inheritance
+  # Press Ctrl+C to stop if it hangs.
   ```
 * **With priority inheritance:**
 
   ```bash
   ./build/main
+  # Press Ctrl+C to stop if needed.
   ```
 
-*Note: On macOS, true CPU affinity cannot be set—delay may be smaller, and you will not observe a hard deadlock.*
+*Note: On macOS, delays may be smaller and true deadlocks may not occur due to lack of core pinning.*
 
 ---
 
@@ -206,10 +206,3 @@ cmake --build build
 * *(No arguments)* or `--inheritance` — Runs with priority inheritance enabled (bug fixed).
 
 ---
-
-## **Limitations of CI Environments and Windows**
-
-> **Note:**
-> In cloud CI environments such as GitHub Actions, Windows runners cannot reliably simulate single-core execution due to virtualization and cloud CPU scheduling. Affinity and thread priority settings are often ignored, and resource sharing with other virtual machines can make thread scheduling unpredictable.
->
-> For the most reliable demonstration and analysis, prefer local testing on Linux with `taskset`, or on your own Windows machine if you can set affinity manually.
