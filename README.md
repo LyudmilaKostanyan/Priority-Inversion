@@ -50,7 +50,7 @@ This is why you should always run the simulation with CPU affinity enabled (sing
 
   * Written in portable C++ with `std::thread` and mutexes, plus platform-specific logic for setting thread priorities and affinity.
   * On Linux, uses a POSIX mutex with `PTHREAD_PRIO_INHERIT` if available for a realistic kernel-level effect.
-  * On Windows, the simulation manually boosts low-priority thread priority if the high-priority thread is blocked. In CI, affinity cannot be set and priority boosts may be ignored.
+  * On Windows, the simulation manually boosts low-priority thread priority if the high-priority thread is blocked.
   * The medium thread runs a busy-wait loop to simulate heavy CPU contention.
 
 ---
